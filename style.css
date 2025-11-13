@@ -1,0 +1,115 @@
+/* style.css (Updated for larger text) */
+
+/* =================================
+--- NEW: Text & Font Sizes ---
+=================================
+*/
+
+/* This makes ALL normal text in the app bigger */
+.stApp, .stApp p, .stApp div, .stApp li, .stApp label {
+    font-size: 1.1rem !important;
+}
+
+/* Make the main title larger */
+.stApp h1 {
+    font-size: 3rem !important;
+}
+
+/* Make the tab headers larger */
+.stApp button[data-baseweb="tab"] {
+    font-size: 1.25rem !important;
+    padding: 10px 15px !important;
+}
+
+/* Make the metric *numbers* (the value) larger */
+div[data-testid="stMetricValue"] {
+    font-size: 2.5rem !important;
+    color: #0068C9 !important; /* Make the number blue */
+}
+
+/* Make the progress bar text larger */
+div[data-testid="stProgressBar"] .stText {
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+}
+
+
+/* --- Main App --- */
+.stApp {
+    background-image: linear-gradient(170deg, #E8F5E9, #E3F2FD);
+}
+
+/* --- Tabs --- */
+button[data-baseweb="tab"][aria-selected="true"] {
+    background-color: #C8E6C9; 
+    color: #1B5E20; 
+}
+
+/* --- Metric Boxes in Live Session --- */
+div[data-testid="stMetric"] {
+    background-color: #FFFFFF; 
+    border: 2px solid #1B5E20; 
+    border-radius: 10px;
+    padding: 15px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1); 
+}
+
+div[data-testid="stMetric"] label {
+    color: #1B5E20;
+    font-size: 1.1rem !important; /* Make metric label larger */
+}
+
+/* --- Progress Bar --- */
+div[data-testid="stProgressBar"] > div {
+    background-color: #4CAF50;
+}
+
+/* --- Dashboard Charts --- */
+div[data-testid="stLineChart"], div[data-testid="stBarChart"] {
+    background-color: #FFFFFF;
+    border-radius: 10px;
+    padding: 15px;
+}
+
+/* --- Interactive Buttons --- */
+div[data-testid="stButton"] > button {
+    border-radius: 8px;
+    font-weight: 600;
+    border: 2px solid #333;
+    transition: transform 0.1s ease, background-color 0.1s ease;
+}
+
+div[data-testid="stButton"] > button:hover {
+    transform: scale(1.03); 
+    background-color: #C8E6C9;
+    border-color: #1B5E20;
+}
+
+div[data-testid="stButton"] > button:active {
+    transform: scale(0.98);
+    background-color: #A5D6A7;
+}
+
+
+/* --- Corrected Mode Selector --- */
+div[data-testid="stRadio"] div[role="radiogroup"] label {
+    background-color: #FFFFFF;
+    border-radius: 20px;
+    padding: 8px 16px;
+    margin: 0 5px;
+    transition: background-color 0.3s ease;
+    border: 1px solid #B0B0B0;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+div[data-testid="stRadio"] div[role="radiogroup"] label:hover {
+    background-color: #E3F2FD;
+    border-color: #0068C9;
+}
+
+div[data-testid="stRadio"] div[role="radiogroup"] label:has(div[data-checked="true"]) {
+    background-color: #0068C9;
+    color: white;
+    border-color: #004a9e;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}

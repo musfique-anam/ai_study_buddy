@@ -15,7 +15,7 @@ class FocusEstimator:
         self.posture_alert = False
         self.focused_seconds = 0
         self.drowsy_seconds = 0
-        self.distracted_seconds = 0 # <-- THIS LINE WAS ADDED
+        self.distracted_seconds = 0 # <-- Includes the fix from our last conversation
 
         # Get face landmark indices
         (self.lStart, self.lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
@@ -38,7 +38,7 @@ class FocusEstimator:
         if C == 0: return 0.0 # Avoid division by zero
         return (A+B)/(2.0*C)
 
-    def process_frame_light(self, frame):
+    def process_frame(self, frame):
         # --- Estimate frame processing time (assuming ~30FPS) ---
         FRAME_TIME_DELTA = 1/30.0 
         
@@ -50,10 +50,13 @@ class FocusEstimator:
         is_drowsy = False
         is_distracted = False
 
+        # --- THIS IS THE CRITICAL FIX ---
         if len(faces) == 0:
-            is_distracted = True # No face detected
-            self.posture_alert = True # Treat as bad posture
+            # BUG FIX: If no face is detected, count as distracted
+            is_distracted = True 
+            self.posture_alert = True 
         else:
+            # A face was found, so run the normal logic
             face = faces[0] # Assume one student
             shape = self.predictor(gray, face)
             shape_np = face_utils.shape_to_np(shape)
@@ -107,8 +110,9 @@ class FocusEstimator:
             elif is_distracted:
                 color = (0,255,255) # Yellow = Distracted
             cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
+        # --- END OF THE FIX ---
 
-        # --- UPDATE COUNTERS (This section was updated) ---
+        # Update counters
         if is_drowsy:
             self.drowsy_seconds += FRAME_TIME_DELTA
         elif is_distracted:

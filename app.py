@@ -1,18 +1,29 @@
 # app.py
 import streamlit as st
 import cv2
-from focus_detector import FocusEstimator
+from focus_detector import FocusEstimator # For Normal/Pomodoro
+from pro_detector import ProEstimator   # For Pro Mode
 import time
 import base64
 import streamlit.components.v1 as components
 import db
 from datetime import datetime
+import pandas as pd
+
+# --- CUSTOM CSS FUNCTION ---
+def load_css(file_name):
+    with open(file_name) as f:
+        css = f.read()
+    st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
+# --- END OF CSS FUNCTION ---
 
 # ---------------------------
 # Page Setup
 # ---------------------------
 st.set_page_config(page_title="AI Study Buddy", layout="wide")
-st.title("🧠 AI Study Buddy – Pundra Students")
+st.title("AI Study Buddy")
+
+load_css("style.css") # <-- Make sure this line is here
 
 # --- Initialize Database ---
 db.init_db()
@@ -23,7 +34,9 @@ db.init_db()
 if 'session_running' not in st.session_state:
     st.session_state.session_running = False
 if 'estimator' not in st.session_state:
-    st.session_state.estimator = FocusEstimator()
+    st.session_state.estimator = None
+if 'mode' not in st.session_state:
+    st.session_state.mode = "Normal" # Default mode
 if 'pomodoro_running' not in st.session_state:
     st.session_state.pomodoro_running = False
 if 'pomodoro_start_time' not in st.session_state:
@@ -33,30 +46,12 @@ if 'session_start_time' not in st.session_state:
 if 'total_alerts' not in st.session_state:
     st.session_state.total_alerts = 0
 if 'cap' not in st.session_state:
-    st.session_state.cap = None # Camera will be initialized later
+    st.session_state.cap = None 
+if 'last_annotated_frame' not in st.session_state:
+    st.session_state.last_annotated_frame = None
 
 # ---------------------------
-# Instructions / Features
-# ---------------------------
-with st.expander("ℹ️ Instructions & Features", expanded=True):
-    st.markdown("""
-- **Step 1:** Click 'Start Study Session'.
-- **Step 2:** Click 'Start Pomodoro' if you want a timed session.
-- **Step 3:** Click 'Stop Session' to finish and save your data.
-- Alerts for drowsiness, yawning, and poor posture.
-- Session data is saved and displayed below.
-""")
-
-# ---------------------------
-# Placeholders for Streamlit UI
-# ---------------------------
-frame_placeholder = st.image([])
-timing_placeholder = st.empty()
-alert_placeholder = st.empty()
-pomodoro_placeholder = st.empty()
-
-# ---------------------------
-# Function to play sound instantly in browser
+# Function to play sound
 # ---------------------------
 def play_sound(file_path):
     with open(file_path, "rb") as f:
@@ -69,194 +64,342 @@ def play_sound(file_path):
     """
     components.html(audio_html, height=0)
 
-# ---------------------------
-# Session and Pomodoro Controls
-# ---------------------------
-col1, col2, col3 = st.columns(3)
-with col1:
-    start_session = st.button(
-        "▶️ Start Study Session", 
-        key="start_session", 
-        disabled=st.session_state.session_running
-    )
-with col2:
-    stop_session = st.button(
-        "⏹ Stop Session", 
-        key="stop_session", 
-        disabled=not st.session_state.session_running
-    )
-with col3:
-    start_pomodoro = st.button(
-        "⏱ Start Pomodoro (25 min focus)", 
-        key="start_pomodoro", 
-        disabled=not st.session_state.session_running or st.session_state.pomodoro_running
-    )
 
-pomodoro_duration = 25 * 60  # 25 minutes
+# =====================================================================
+# --- NEW UI: Main Tabs ---
+# =====================================================================
+
+tab1, tab2 = st.tabs(["Live Session", " Dashboard"])
 
 # ---------------------------
-# Alert cooldown (seconds)
+# --- TAB 1: LIVE SESSION ---
 # ---------------------------
-alert_cooldown = {"blink": 0, "yawn": 0}
-COOLDOWN_TIME = 5  # seconds
-
-# ---------------------------
-# Session Logic
-# ---------------------------
-if start_session:
-    st.session_state.cap = cv2.VideoCapture(0) # <-- CAMERA IS OPENED HERE
-    if not st.session_state.cap.isOpened():
-        st.warning("Cannot access webcam. Please check permissions or try another index (e.g., 1 instead of 0).")
-        st.session_state.cap = None
-    else:
-        st.session_state.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        st.session_state.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+with tab1:
+    # --- Top Control Panel ---
+    with st.container(border=True):
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            # --- Mode Selector ---
+            st.radio(
+                "Select Study Mode",
+                ("Normal", "Pomodoro", "Pro"),
+                key="mode_select",
+                horizontal=True,
+                disabled=st.session_state.session_running # Disable if session is on
+            )
+            mode = st.session_state.mode_select # Get the selection
         
-        st.session_state.session_running = True
-        st.session_state.session_start_time = datetime.now()
-        # Reset counters
-        st.session_state.estimator = FocusEstimator()
-        st.session_state.total_alerts = 0
+        with c2:
+             # --- Session and Pomodoro Controls ---
+            sc1, sc2, sc3 = st.columns(3)
+            with sc1:
+                start_session = st.button(
+                    "▶️ Start Study Session", 
+                    key="start_session", 
+                    disabled=st.session_state.session_running,
+                    use_container_width=True
+                )
+            with sc2:
+                stop_session = st.button(
+                    "⏹ Stop Session", 
+                    key="stop_session", 
+                    disabled=not st.session_state.session_running,
+                    use_container_width=True
+                )
+            
+            # Only show Pomodoro button in Pomodoro mode
+            if mode == "Pomodoro":
+                with sc3:
+                    start_pomodoro = st.button(
+                        "⏱ Start Pomodoro (25 min)", 
+                        key="start_pomodoro", 
+                        disabled=not st.session_state.session_running or st.session_state.pomodoro_running,
+                        use_container_width=True
+                    )
+            else:
+                start_pomodoro = False # Set to false if not in Pomodoro mode
+
+    st.markdown("---") # Visual divider
+
+    # --- Layout for Video and Live Stats ---
+    col1, col2 = st.columns([2, 1]) 
+
+    with col1:
+        frame_placeholder = st.image([])
+
+    with col2:
+        # Only show the live stats container IF the session is running
+        if st.session_state.session_running:
+            with st.container(border=True):
+                st.markdown("### Live Stats")
+                focus_percent_placeholder = st.progress(0, text="Focus %") # Live progress bar
+                
+                # Placeholders for Pomodoro and Alerts
+                pomodoro_placeholder = st.empty()
+                alert_placeholder = st.empty()
+                
+                st.divider()
+                st.markdown("### Live Counters")
+                
+                # Create 3 placeholders for 3 metrics
+                metric_col1, metric_col2, metric_col3 = st.columns(3)
+                with metric_col1:
+                    focus_placeholder = st.empty()
+                with metric_col2:
+                    drowsy_placeholder = st.empty()
+                with metric_col3:
+                    distract_placeholder = st.empty()
+        
+
+    pomodoro_duration = 25 * 60  # 25 minutes
+    alert_cooldown = {"blink": 0, "yawn": 0, "emotion": 0}
+    COOLDOWN_TIME = 5  # seconds
+
+    # --- Session Logic ---
+    if start_session:
+        st.session_state.cap = cv2.VideoCapture(0)
+        if not st.session_state.cap.isOpened():
+            st.warning("Cannot access webcam.")
+            st.session_state.cap = None
+        else:
+            st.session_state.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            st.session_state.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            
+            st.session_state.session_running = True
+            st.session_state.session_start_time = datetime.now()
+            st.session_state.mode = mode # Lock in the mode
+            
+            try:
+                if st.session_state.mode == "Pro":
+                    with st.spinner("Loading Pro Model (this may take a moment)..."):
+                        st.session_state.estimator = ProEstimator()
+                else: # Normal or Pomodoro
+                    with st.spinner("Loading Detector..."):
+                        st.session_state.estimator = FocusEstimator()
+                
+                st.session_state.total_alerts = 0
+                st.session_state.last_annotated_frame = None
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error loading model: {e}")
+                st.error("Did you place 'fer_model.h5' and 'shape_predictor_68_face_landmarks.dat' in the folder?")
+                st.session_state.session_running = False
+                if st.session_state.cap:
+                    st.session_state.cap.release()
+                st.session_state.cap = None
+
+    if stop_session:
+        st.session_state.session_running = False
+        st.session_state.pomodoro_running = False
+        
+        if st.session_state.cap is not None:
+            st.session_state.cap.release()
+            st.session_state.cap = None
+        
+        estimator = st.session_state.estimator
+        if estimator is not None:
+            session_data = {
+                "username": "pundra_student",
+                "start_time": st.session_state.session_start_time.strftime("%Y-%m-%d %H:%M:%S"),
+                "end_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "focused_seconds": int(estimator.focused_seconds),
+                "distracted_seconds": int(estimator.distracted_seconds),
+                "drowsy_seconds": int(estimator.drowsy_seconds),
+                "alerts": st.session_state.total_alerts
+            }
+            db.insert_session(session_data)
+            st.success("Session stopped and saved!")
+        
+        frame_placeholder.empty()
+        st.session_state.last_annotated_frame = None
+        st.session_state.estimator = None
         st.rerun()
 
-if stop_session:
-    st.session_state.session_running = False
-    st.session_state.pomodoro_running = False
-    
-    if st.session_state.cap is not None:
-        st.session_state.cap.release() # <-- CAMERA IS RELEASED HERE
-        st.session_state.cap = None
-    
-    # --- SAVE SESSION TO DATABASE ---
-    session_data = {
-        "username": "pundra_student", # Placeholder username
-        "start_time": st.session_state.session_start_time.strftime("%Y-%m-%d %H:%M:%S"),
-        "end_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "focused_seconds": int(st.session_state.estimator.focused_seconds),
-        "distracted_seconds": int(st.session_state.estimator.distracted_seconds),
-        "drowsy_seconds": int(st.session_state.estimator.drowsy_seconds),
-        "alerts": st.session_state.total_alerts
-    }
-    db.insert_session(session_data)
-    
-    st.success("Session stopped and saved!")
-    # Clear the image placeholder
-    frame_placeholder.empty()
-    st.rerun()
+    # --- Main Loop ---
+    frame_counter = 0
+    estimator = st.session_state.estimator 
 
+    # This 'if' block now matches the one we added for the placeholders
+    if st.session_state.session_running and st.session_state.cap is not None and estimator is not None:
+        while True: 
+            ret, frame = st.session_state.cap.read()
+            if not ret:
+                st.warning("Webcam feed lost.")
+                st.session_state.session_running = False
+                break
 
-# ---------------------------
-# Main Loop
-# ---------------------------
-if st.session_state.session_running and st.session_state.cap is not None:
-    while True: # Loop until stop is pressed
-        ret, frame = st.session_state.cap.read()
-        if not ret:
-            st.warning("Webcam feed lost.")
-            st.session_state.session_running = False
-            break
+            frame = cv2.flip(frame, 1)
+            
+            # --- Optimization: Process 1 in 4 frames ---
+            frame_counter += 1
+            annotated_frame = None
+            
+            if frame_counter % 3 == 0: # <-- Using 1 in 4 for better performance
+                annotated_frame = estimator.process_frame(frame) 
+                st.session_state.last_annotated_frame = annotated_frame
+            else:
+                if st.session_state.last_annotated_frame is not None:
+                    annotated_frame = st.session_state.last_annotated_frame
+                else:
+                    annotated_frame = frame 
+            
+            frame_placeholder.image(
+                cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB),
+                channels="RGB",
+                use_container_width=True
+            )
 
-        frame = cv2.flip(frame, 1)
-        estimator = st.session_state.estimator
-        annotated_frame = estimator.process_frame_light(frame)
+            # --- Update Live Dashboard ---
+            total_seconds = estimator.focused_seconds + estimator.drowsy_seconds + estimator.distracted_seconds
+            focus_percent = (estimator.focused_seconds / max(1, total_seconds))
+            focus_percent_text = f"Focus: {focus_percent*100:.1f}%"
+            
+            focus_percent_placeholder.progress(float(focus_percent), text=focus_percent_text) 
+            
+            # =================================
+            # --- THIS IS THE CHANGE ---
+            # =================================
+            # Show hundredths of a second (like milliseconds)
+            focus_placeholder.metric("🎯 Focus", f"{estimator.focused_seconds:.2f}s")
+            drowsy_placeholder.metric("😴 Drowsy", f"{estimator.drowsy_seconds:.2f}s")
+            distract_placeholder.metric("😵 Distracted", f"{estimator.distracted_seconds:.2f}s")
+            # --- END OF CHANGE ---
 
-        # Display frame
-        frame_placeholder.image(
-            cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB),
-            channels="RGB",
-            use_container_width=True
-        )
+            current_time = time.time()
+            alert_text = ""
 
-        # Live counters
-        total_seconds = estimator.focused_seconds + estimator.drowsy_seconds + estimator.distracted_seconds
-        focus_percent = (estimator.focused_seconds / max(1, total_seconds)) * 100
-        timing_placeholder.text(
-            f"Focused: {estimator.focused_seconds:.1f}s | "
-            f"Drowsy (Blinks): {estimator.drowsy_seconds:.1f}s | "
-            f"Distracted (Yawn/Posture): {estimator.distracted_seconds:.1f}s | "
-            f"Focus %: {focus_percent:.1f}%"
-        )
+            # --- TYPO FIX 1 ---
+            if estimator.yawn_alert and current_time - alert_cooldown["yawn"] > COOLDOWN_TIME:
+                play_sound("alert.wav")
+                alert_cooldown["yawn"] = current_time
+                alert_text += "⚠️ Yawning! "
+                st.session_state.total_alerts += 1
 
-        # Current time for cooldown
-        current_time = time.time()
-        alert_text = ""
+            if estimator.blink_alert and current_time - alert_cooldown["blink"] > COOLDOWN_TIME:
+                play_sound("alert.wav")
+                alert_cooldown["blink"] = current_time
+                alert_text += "⚠️ Drowsy! "
+                st.session_state.total_alerts += 1
 
-        # Blink alert
-        if estimator.blink_alert and current_time - alert_cooldown["blink"] > COOLDOWN_TIME:
-            play_sound("alert.wav")
-            alert_cooldown["blink"] = current_time
-            alert_text += "⚠️ Drowsy! "
-            st.session_state.total_alerts += 1
+            if estimator.posture_alert:
+                alert_text += "⚠️ Sit upright! "
 
-        # Yawn alert
-        if estimator.yawn_alert and current_time - alert_cooldown["yawn"] > COOLDOWN_TIME:
-            play_sound("alert.wav")
-            alert_cooldown["yawn"] = current_time
-            alert_text += "⚠️ Yawning! "
-            st.session_state.total_alerts += 1
+            if st.session_state.mode == "Pro":
+                # --- TYPO FIX 2 ---
+                if estimator.emotion_alert and current_time - alert_cooldown["emotion"] > current_time:
+                    alert_cooldown["emotion"] = current_time
+                    alert_text += f"⚠️ Distracted ({estimator.current_emotion})! "
+                    st.session_state.total_alerts += 1
 
-        # Posture alert
-        if estimator.posture_alert:
-            alert_text += "⚠️ Sit upright! "
+            if alert_text:
+                alert_placeholder.error(alert_text)
+            else:
+                alert_placeholder.empty()
 
-        alert_placeholder.text(alert_text)
-
-        # Pomodoro start
-        if start_pomodoro and not st.session_state.pomodoro_running:
-            st.session_state.pomodoro_start_time = time.time()
-            st.session_state.pomodoro_running = True
-
-        # Pomodoro countdown
-        if st.session_state.pomodoro_running:
-            elapsed = time.time() - st.session_state.pomodoro_start_time
-            remaining = max(0, pomodoro_duration - elapsed)
-            minutes = int(remaining // 60)
-            seconds = int(remaining % 60)
-            pomodoro_placeholder.markdown(f"⏳ Pomodoro Timer: {minutes:02d}:{seconds:02d}")
-
-            if remaining <= 0:
-                play_sound("alert.wav") # Play sound on completion
-                st.balloons()
-                st.success("✅ Pomodoro complete! Take a short break.")
-                st.session_state.pomodoro_running = False
-                start_pomodoro = False # Reset button state
+            if start_pomodoro and not st.session_state.pomodoro_running:
+                st.session_state.pomodoro_start_time = time.time()
+                st.session_state.pomodoro_running = True
+                start_pomodoro = False 
                 st.rerun()
 
-        # ---------------------------
-        # Limit FPS to stabilize Streamlit
-        # ---------------------------
-        time.sleep(0.03)  # ~30 FPS
-        
-        # Check if stop has been pressed
-        if not st.session_state.session_running:
-            break
+            if st.session_state.mode == "Pomodoro" and st.session_state.pomodoro_running:
+                elapsed = time.time() - st.session_state.pomodoro_start_time
+                remaining = max(0, pomodoro_duration - elapsed)
+                minutes = int(remaining // 60)
+                seconds = int(remaining % 60)
+                
+                pomodoro_placeholder.markdown(f"### ⏳ Pomodoro: {minutes:02d}:{seconds:02d}")
+
+                if remaining <= 0:
+                    play_sound("alert.wav") 
+                    st.balloons()
+                    st.success("✅ Pomodoro complete! Take a short break.")
+                    st.session_state.pomodoro_running = False
+                    st.rerun()
             
-# ---------------------------
-# Clean up if cap is still open (e.g., on script stop)
-# ---------------------------
+            if not st.session_state.session_running:
+                break
+                
+    # --- End of While Loop ---
+
+# --- Cleanup ---
 if st.session_state.cap is not None:
     st.session_state.cap.release()
     st.session_state.cap = None
-
 cv2.destroyAllWindows()
 
+
 # ---------------------------
-# Show Past Sessions
+# --- TAB 2: DASHBOARD ---
 # ---------------------------
-with st.expander("📊 Past Sessions", expanded=True):
+with tab2:
+    st.header("Your Study Dashboard")
+    st.write("Review your past performance and see your focus trends over time.")
+
     sessions = db.fetch_all()
-    if sessions:
-        display_data = []
-        for s in sessions:
-            display_data.append({
-                "ID": s[0],
-                "Start Time": s[2],
-                "End Time": s[3],
-                "Focused (s)": s[4],
-                "Distracted (s)": s[5],
-                "Drowsy (s)": s[6],
-                "Alerts": s[7],
-            })
-        st.dataframe(display_data, use_container_width=True)
+    
+    if not sessions:
+        st.info("You don't have any saved study sessions yet. Complete a session in the 'Live Session' tab to see your stats here!")
     else:
-        st.write("No study sessions recorded yet.")
+        # --- Convert DB data to Pandas DataFrame ---
+        df = pd.DataFrame(
+            sessions,
+            columns=[
+                'id', 'username', 'start_time', 'end_time', 
+                'focused_seconds', 'distracted_seconds', 'drowsy_seconds', 'alerts'
+            ]
+        )
+        # Convert times to datetime objects for plotting
+        df['start_time'] = pd.to_datetime(df['start_time'])
+        
+        # --- Create new metrics for the dashboard ---
+        df['total_seconds'] = df['focused_seconds'] + df['distracted_seconds'] + df['drowsy_seconds']
+        df['total_minutes'] = (df['total_seconds'] / 60).round(1)
+        df['focus_percent'] = (df['focused_seconds'] / df['total_seconds'] * 100).round(1)
+        
+        # Set start_time as the index for time-series charts
+        df_chart = df.set_index('start_time')
+
+        # --- Show Key Metrics ---
+        st.subheader("All-Time Stats")
+        with st.container(border=True):
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Sessions", len(df))
+            col2.metric("Total Study Time", f"{df['total_minutes'].sum():.1f} min")
+            col3.metric("Avg. Focus %", f"{df['focus_percent'].mean():.1f}%")
+
+        st.divider()
+
+        # --- Show Charts ---
+        st.subheader("Focus % Over Time")
+        st.line_chart(df_chart['focus_percent'])
+
+        st.subheader("Alerts Per Session")
+        st.bar_chart(df_chart['alerts'])
+
+        st.subheader("Time Breakdown per Session (in seconds)")
+        st.bar_chart(df_chart[['focused_seconds', 'drowsy_seconds', 'distracted_seconds']])
+
+# =================================
+        # --- THIS IS THE FIX ---
+        # =================================
+        with st.expander("Show Raw Session Data"):
+            # 1. Create a copy with just the columns you want
+            df_display = df[[
+                'start_time', 'end_time', 'total_minutes', 
+                'focus_percent', 'alerts'
+            ]].copy()
+            
+            # 2. Rename columns to be user-friendly
+            df_display.columns = [
+                'Start Time', 'End Time', 'Duration (min)', 
+                'Focus %', 'Alerts'
+            ]
+            
+            # 3. Create a new "Session" index starting from 1
+            df_display.index = pd.RangeIndex(start=1, stop=len(df_display) + 1)
+            df_display.index.name = "Session"
+            
+            # 4. Display the clean DataFrame
+            st.dataframe(df_display, use_container_width=True)
+        # --- END OF FIX ---
