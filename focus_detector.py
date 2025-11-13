@@ -1,4 +1,3 @@
-# focus_detector.py
 import cv2
 import numpy as np
 from model_utils import get_dlib_detector
@@ -15,9 +14,8 @@ class FocusEstimator:
         self.posture_alert = False
         self.focused_seconds = 0
         self.drowsy_seconds = 0
-        self.distracted_seconds = 0 # <-- Includes the fix from our last conversation
+        self.distracted_seconds = 0 
 
-        # Get face landmark indices
         (self.lStart, self.lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
         (self.rStart, self.rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
         (self.mStart, self.mEnd) = face_utils.FACIAL_LANDMARKS_IDXS["mouth"]
@@ -26,16 +24,16 @@ class FocusEstimator:
         A = np.linalg.norm(eye[1]-eye[5])
         B = np.linalg.norm(eye[2]-eye[4])
         C = np.linalg.norm(eye[0]-eye[3])
-        if C == 0: return 0.3 # Avoid division by zero
+        if C == 0: return 0.3 
         return (A+B)/(2.0*C)
 
     def mouth_aspect_ratio(self, mouth):
-        # vertical distances
-        A = np.linalg.norm(mouth[2]-mouth[10]) # 51-59
-        B = np.linalg.norm(mouth[4]-mouth[8]) # 53-57
-        # horizontal distance
-        C = np.linalg.norm(mouth[0]-mouth[6]) # 49-55
-        if C == 0: return 0.0 # Avoid division by zero
+
+        A = np.linalg.norm(mouth[2]-mouth[10]) 
+        B = np.linalg.norm(mouth[4]-mouth[8]) 
+
+        C = np.linalg.norm(mouth[0]-mouth[6]) 
+        if C == 0: return 0.0 
         return (A+B)/(2.0*C)
 
     def process_frame(self, frame):
@@ -50,13 +48,10 @@ class FocusEstimator:
         is_drowsy = False
         is_distracted = False
 
-        # --- THIS IS THE CRITICAL FIX ---
         if len(faces) == 0:
-            # BUG FIX: If no face is detected, count as distracted
             is_distracted = True 
             self.posture_alert = True 
         else:
-            # A face was found, so run the normal logic
             face = faces[0] # Assume one student
             shape = self.predictor(gray, face)
             shape_np = face_utils.shape_to_np(shape)
@@ -99,8 +94,8 @@ class FocusEstimator:
                 self.posture_alert = False
 
             # Draw landmarks
-            for (x,y) in np.concatenate([leftEye, rightEye, mouth]):
-                cv2.circle(frame, (x,y), 1, (0,255,0), -1)
+            # for (x,y) in np.concatenate([leftEye, rightEye, mouth]):
+            #     cv2.circle(frame, (x,y), 1, (0,255,0), -1)
 
             # Rectangle with color alerts
             x1,y1,x2,y2 = face.left(), face.top(), face.right(), face.bottom()
@@ -110,14 +105,12 @@ class FocusEstimator:
             elif is_distracted:
                 color = (0,255,255) # Yellow = Distracted
             cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
-        # --- END OF THE FIX ---
 
-        # Update counters
         if is_drowsy:
             self.drowsy_seconds += FRAME_TIME_DELTA
         elif is_distracted:
             self.distracted_seconds += FRAME_TIME_DELTA
-        else: # Focused
+        else:
             self.focused_seconds += FRAME_TIME_DELTA
 
         return frame

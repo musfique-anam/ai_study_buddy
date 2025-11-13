@@ -1,8 +1,7 @@
-# app.py
 import streamlit as st
 import cv2
-from focus_detector import FocusEstimator # For Normal/Pomodoro
-from pro_detector import ProEstimator   # For Pro Mode
+from focus_detector import FocusEstimator 
+from pro_detector import ProEstimator 
 import time
 import base64
 import streamlit.components.v1 as components
@@ -10,33 +9,29 @@ import db
 from datetime import datetime
 import pandas as pd
 
-# --- CUSTOM CSS FUNCTION ---
+# CUSTOM CSS FUNCTION 
 def load_css(file_name):
     with open(file_name) as f:
         css = f.read()
     st.markdown(f'<style>{css}</style>', unsafe_allow_html=True)
-# --- END OF CSS FUNCTION ---
 
-# ---------------------------
 # Page Setup
-# ---------------------------
 st.set_page_config(page_title="AI Study Buddy", layout="wide")
 st.title("AI Study Buddy")
 
-load_css("style.css") # <-- Make sure this line is here
+load_css("style.css") 
 
-# --- Initialize Database ---
+#  Initialize Database 
 db.init_db()
 
-# ---------------------------
 # Session State (To hold data across reruns)
-# ---------------------------
+
 if 'session_running' not in st.session_state:
     st.session_state.session_running = False
 if 'estimator' not in st.session_state:
     st.session_state.estimator = None
 if 'mode' not in st.session_state:
-    st.session_state.mode = "Normal" # Default mode
+    st.session_state.mode = "Normal" 
 if 'pomodoro_running' not in st.session_state:
     st.session_state.pomodoro_running = False
 if 'pomodoro_start_time' not in st.session_state:
@@ -50,9 +45,7 @@ if 'cap' not in st.session_state:
 if 'last_annotated_frame' not in st.session_state:
     st.session_state.last_annotated_frame = None
 
-# ---------------------------
 # Function to play sound
-# ---------------------------
 def play_sound(file_path):
     with open(file_path, "rb") as f:
         data = f.read()
@@ -65,15 +58,10 @@ def play_sound(file_path):
     components.html(audio_html, height=0)
 
 
-# =====================================================================
-# --- NEW UI: Main Tabs ---
-# =====================================================================
-
 tab1, tab2 = st.tabs(["Live Session", " Dashboard"])
 
-# ---------------------------
-# --- TAB 1: LIVE SESSION ---
-# ---------------------------
+# TAB 1: LIVE SESSION 
+
 with tab1:
     # --- Top Control Panel ---
     with st.container(border=True):
@@ -85,12 +73,12 @@ with tab1:
                 ("Normal", "Pomodoro", "Pro"),
                 key="mode_select",
                 horizontal=True,
-                disabled=st.session_state.session_running # Disable if session is on
+                disabled=st.session_state.session_running 
             )
-            mode = st.session_state.mode_select # Get the selection
+            mode = st.session_state.mode_select
         
         with c2:
-             # --- Session and Pomodoro Controls ---
+ 
             sc1, sc2, sc3 = st.columns(3)
             with sc1:
                 start_session = st.button(
@@ -107,7 +95,6 @@ with tab1:
                     use_container_width=True
                 )
             
-            # Only show Pomodoro button in Pomodoro mode
             if mode == "Pomodoro":
                 with sc3:
                     start_pomodoro = st.button(
@@ -117,9 +104,9 @@ with tab1:
                         use_container_width=True
                     )
             else:
-                start_pomodoro = False # Set to false if not in Pomodoro mode
+                start_pomodoro = False 
 
-    st.markdown("---") # Visual divider
+    st.markdown("---") 
 
     # --- Layout for Video and Live Stats ---
     col1, col2 = st.columns([2, 1]) 
@@ -128,12 +115,12 @@ with tab1:
         frame_placeholder = st.image([])
 
     with col2:
-        # Only show the live stats container IF the session is running
+       
         if st.session_state.session_running:
             with st.container(border=True):
                 st.markdown("### Live Stats")
-                focus_percent_placeholder = st.progress(0, text="Focus %") # Live progress bar
-                
+                focus_percent_placeholder = st.progress(0, text="Focus %") 
+
                 # Placeholders for Pomodoro and Alerts
                 pomodoro_placeholder = st.empty()
                 alert_placeholder = st.empty()
@@ -141,7 +128,6 @@ with tab1:
                 st.divider()
                 st.markdown("### Live Counters")
                 
-                # Create 3 placeholders for 3 metrics
                 metric_col1, metric_col2, metric_col3 = st.columns(3)
                 with metric_col1:
                     focus_placeholder = st.empty()
@@ -153,7 +139,7 @@ with tab1:
 
     pomodoro_duration = 25 * 60  # 25 minutes
     alert_cooldown = {"blink": 0, "yawn": 0, "emotion": 0}
-    COOLDOWN_TIME = 5  # seconds
+    COOLDOWN_TIME = 5 
 
     # --- Session Logic ---
     if start_session:
@@ -167,13 +153,13 @@ with tab1:
             
             st.session_state.session_running = True
             st.session_state.session_start_time = datetime.now()
-            st.session_state.mode = mode # Lock in the mode
+            st.session_state.mode = mode 
             
             try:
                 if st.session_state.mode == "Pro":
                     with st.spinner("Loading Pro Model (this may take a moment)..."):
                         st.session_state.estimator = ProEstimator()
-                else: # Normal or Pomodoro
+                else: 
                     with st.spinner("Loading Detector..."):
                         st.session_state.estimator = FocusEstimator()
                 
@@ -219,7 +205,6 @@ with tab1:
     frame_counter = 0
     estimator = st.session_state.estimator 
 
-    # This 'if' block now matches the one we added for the placeholders
     if st.session_state.session_running and st.session_state.cap is not None and estimator is not None:
         while True: 
             ret, frame = st.session_state.cap.read()
@@ -230,11 +215,11 @@ with tab1:
 
             frame = cv2.flip(frame, 1)
             
-            # --- Optimization: Process 1 in 4 frames ---
+            # Optimization
             frame_counter += 1
             annotated_frame = None
             
-            if frame_counter % 3 == 0: # <-- Using 1 in 4 for better performance
+            if frame_counter % 6 == 0:
                 annotated_frame = estimator.process_frame(frame) 
                 st.session_state.last_annotated_frame = annotated_frame
             else:
@@ -256,19 +241,15 @@ with tab1:
             
             focus_percent_placeholder.progress(float(focus_percent), text=focus_percent_text) 
             
-            # =================================
-            # --- THIS IS THE CHANGE ---
-            # =================================
             # Show hundredths of a second (like milliseconds)
             focus_placeholder.metric("🎯 Focus", f"{estimator.focused_seconds:.2f}s")
             drowsy_placeholder.metric("😴 Drowsy", f"{estimator.drowsy_seconds:.2f}s")
             distract_placeholder.metric("😵 Distracted", f"{estimator.distracted_seconds:.2f}s")
-            # --- END OF CHANGE ---
+
 
             current_time = time.time()
             alert_text = ""
 
-            # --- TYPO FIX 1 ---
             if estimator.yawn_alert and current_time - alert_cooldown["yawn"] > COOLDOWN_TIME:
                 play_sound("alert.wav")
                 alert_cooldown["yawn"] = current_time
@@ -285,7 +266,7 @@ with tab1:
                 alert_text += "⚠️ Sit upright! "
 
             if st.session_state.mode == "Pro":
-                # --- TYPO FIX 2 ---
+                
                 if estimator.emotion_alert and current_time - alert_cooldown["emotion"] > current_time:
                     alert_cooldown["emotion"] = current_time
                     alert_text += f"⚠️ Distracted ({estimator.current_emotion})! "
@@ -328,10 +309,8 @@ if st.session_state.cap is not None:
     st.session_state.cap = None
 cv2.destroyAllWindows()
 
-
-# ---------------------------
 # --- TAB 2: DASHBOARD ---
-# ---------------------------
+
 with tab2:
     st.header("Your Study Dashboard")
     st.write("Review your past performance and see your focus trends over time.")
@@ -357,7 +336,7 @@ with tab2:
         df['total_minutes'] = (df['total_seconds'] / 60).round(1)
         df['focus_percent'] = (df['focused_seconds'] / df['total_seconds'] * 100).round(1)
         
-        # Set start_time as the index for time-series charts
+      
         df_chart = df.set_index('start_time')
 
         # --- Show Key Metrics ---
@@ -377,29 +356,20 @@ with tab2:
         st.subheader("Alerts Per Session")
         st.bar_chart(df_chart['alerts'])
 
-        st.subheader("Time Breakdown per Session (in seconds)")
-        st.bar_chart(df_chart[['focused_seconds', 'drowsy_seconds', 'distracted_seconds']])
-
-# =================================
-        # --- THIS IS THE FIX ---
-        # =================================
         with st.expander("Show Raw Session Data"):
-            # 1. Create a copy with just the columns you want
+           
             df_display = df[[
                 'start_time', 'end_time', 'total_minutes', 
                 'focus_percent', 'alerts'
             ]].copy()
             
-            # 2. Rename columns to be user-friendly
             df_display.columns = [
                 'Start Time', 'End Time', 'Duration (min)', 
                 'Focus %', 'Alerts'
             ]
             
-            # 3. Create a new "Session" index starting from 1
             df_display.index = pd.RangeIndex(start=1, stop=len(df_display) + 1)
             df_display.index.name = "Session"
             
             # 4. Display the clean DataFrame
             st.dataframe(df_display, use_container_width=True)
-        # --- END OF FIX ---

@@ -1,4 +1,3 @@
-# pro_detector.py
 import cv2
 import numpy as np
 import dlib
@@ -11,7 +10,7 @@ from config import (
 
 class ProEstimator:
     def __init__(self):
-        # 1. Dlib Heuristics (like FocusEstimator)
+        # 1. Dlib 
         self.dlib_detector = dlib.get_frontal_face_detector()
         self.dlib_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
         (self.lStart, self.lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
@@ -19,10 +18,9 @@ class ProEstimator:
         (self.mStart, self.mEnd) = face_utils.FACIAL_LANDMARKS_IDXS["mouth"]
 
         # 2. Emotion DL Model (Keras)
-        # --- !! IMPORTANT: Place your fer_model.h5 file in your project folder !! ---
         self.emotion_model = load_model("fer_model.h5") 
         
-        # 3. Face detector for Emotion (Haar Cascade is faster for this)
+        # 3. Face detector for Emotion 
         self.face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         
         # 4. State variables

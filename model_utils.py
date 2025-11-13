@@ -1,4 +1,3 @@
-# model_utils.py
 import dlib
 
 DLIB_PREDICTOR_PATH = "shape_predictor_68_face_landmarks.dat"
